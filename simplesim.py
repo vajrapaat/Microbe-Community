@@ -59,8 +59,6 @@ def plotting(particles, pairs, filename="savedsim.png"):
     ax.set_title(f"{len(particles)} particles, {len(pairs)} pairs within range")
     fig.savefig(filename, dpi=150, bbox_inches="tight")
     plt.close(fig)
-    print("Saved visualization to", filename)
-
 if __name__ == "__main__":
     particles, pairs = run_sim()
     plotting(particles, pairs)
