@@ -16,34 +16,7 @@ DIAMETER = 1.0          # fixed rod diameter (SI: d)
 G = 1.0                  # growth rate constant (SI Eq. 26, g ~= 1)
 KAPPA = 0.333            # nutrient half-saturation constant (SI Eq. 23)
 INTERACTION_STRENGTH = 1500.0  # Hertzian force constant -- see note below
-
-# Instead of one fixed DT, we cap how far any single cell is allowed to
-# move in one step (SI, "Numerical Integration": "a variable timestep...
-# ensuring that the maximal movement of any cell was a small fraction of
-# the cell diameter"). Without this, once the colony gets dense, more
-# cells start overlapping per step than a fixed-size update can push
-# apart again, and overlap quietly accumulates step after step -- which
-# is exactly the "significant overlap in the end stage" you're seeing.
-SAFETY_FRACTION = 0.05   # max allowed movement per step, as a fraction of DIAMETER
-DT_MIN = 1e-4
-DT_MAX = 0.05
-
-
-def adaptive_dt(cells, forces, torques):
-    max_speed = 0.0
-    for i, cell in enumerate(cells):
-        length = cell[3]
-        fx, fy = forces[i]
-        # translational speed, plus how fast the far tip moves due to rotation
-        speed = math.hypot(fx, fy) + abs(torques[i]) * length / 2.0
-        if speed > max_speed:
-            max_speed = speed
-
-    if max_speed < 1e-12:
-        return DT_MAX
-
-    dt = SAFETY_FRACTION * DIAMETER / max_speed
-    return min(max(dt, DT_MIN), DT_MAX)
+DT = 0.01                # fixed timestep (SI used a variable one; fixed is simpler to start with)
 
 
 def sample_division_length():
@@ -151,10 +124,10 @@ def closest_points_segments(p1, q1, p2, q2, eps=1e-9):
 # forces: Hertzian contact force + torque (SI Eq. 10-11, Table S1)
 # ---------------------------------------------------------------
 # INTERACTION_STRENGTH stands in for k = E*tc/(beta*rho). The SI's real
-# value works out to about 10,000. 1500 is still softer than that for
-# runtime's sake, but with the adaptive timestep above (movement capped
-# per step) it's stiff enough to resolve overlaps properly instead of
-# just slowing them down.
+# value works out to about 10,000; 1500 is softer for runtime's sake.
+# With a fixed DT (no adaptive stepping), this is a fixed tradeoff:
+# stiff enough to push cells apart, but some overlap in dense regions
+# is expected rather than fully corrected.
 
 def compute_forces(cells):
     n = len(cells)
@@ -261,23 +234,18 @@ def divide_cells(cells):
 # simulation loop
 # ---------------------------------------------------------------
 
-def run_sim(n_particles=20, box_size=20, n_steps=3000):
+def run_sim(n_particles=20, box_size=20, n_steps=300):
     cells = part_init(n_particles, box_size)
     plotting(cells, filename="initial_state.png")  # snapshot before anything moves
 
-    tau = 0.0
-
     for step in range(n_steps):
         forces, torques, contacts = compute_forces(cells)
-        dt = adaptive_dt(cells, forces, torques)
-        integrate(cells, forces, torques, dt)
-        grow_cells(cells, dt)
+        integrate(cells, forces, torques, DT)
+        grow_cells(cells, DT)
         cells = divide_cells(cells)
-        tau += dt
 
         if step % 50 == 0:
-            print(f"  step {step:3d}: tau={tau:6.3f}  dt={dt:.5f}  "
-                  f"{len(cells)} cells, {len(contacts)} in contact")
+            print(f"  step {step:3d}: {len(cells)} cells, {len(contacts)} in contact")
 
     print()
     return cells, contacts
