@@ -9,6 +9,8 @@ UPDATE: I added two kinds of species with neutral interactions. basically their 
 
 
 Initial State:
+
+
 <img width="607" height="754" alt="initial_state" src="https://github.com/user-attachments/assets/4d1c6f19-437d-446a-a80a-0cd1665158c4" />
 
 Final State:
