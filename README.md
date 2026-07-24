@@ -6,6 +6,8 @@ I'll put in the codes for making the simulations for each paper, mainly for some
 This file contains a partially recreated simulation of "cells" which have an area (are rod shaped). Lattice is of open boundary. They move randomly in discrete time steps and detect cells in proximity of a certain radius of detection (here 1.5). This implements the hertzian forces, cell movement, cell growth, cell division in the simulation.
 
 UPDATE: I added two kinds of species with neutral interactions. basically their growth rates do not change anything about the other species growth rates at all. It seems to be working fine, shown below:
+
+
 Initial State:
 <img width="607" height="754" alt="initial_state" src="https://github.com/user-attachments/assets/4d1c6f19-437d-446a-a80a-0cd1665158c4" />
 
