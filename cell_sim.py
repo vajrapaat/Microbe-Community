@@ -3,6 +3,7 @@ import math
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.patches import Circle, Polygon
 
 
 DIAMETER = 1.0         
@@ -10,6 +11,7 @@ G = 1.0
 KAPPA = 0.333           
 INTERACTION_STRENGTH = 1800.0  
 DT = 0.01               
+Color = {0:'red', 1:'steelblue'}
 
 def sample_division_length():
     l = random.gauss(4.0, 0.3)
@@ -23,8 +25,26 @@ def part_init(n, box_size):
         y = random.uniform(0, box_size)
         angle = random.uniform(0, 2 * math.pi)
         length = random.uniform(2.0, 3.0)
-        cells.append([x, y, angle, length, sample_division_length()])
+        species = i % 2
+        cells.append([x, y, angle, length, sample_division_length(), species])
     return cells
+
+def draw_capsule(ax, cell, alpha=1):
+    x, y, angle, length, species = cell[0], cell[1], cell[2], cell[3], cell[5]
+    color = Color[species]
+    r = DIAMETER / 2.0
+    half = length / 2.0
+    dirx, diry = math.cos(angle), math.sin(angle)
+    perp_x, perp_y = -diry, dirx
+
+    p1 = (x - half * dirx + r * perp_x, y - half * diry + r * perp_y)
+    p2 = (x + half * dirx + r * perp_x, y + half * diry + r * perp_y)
+    p3 = (x + half * dirx - r * perp_x, y + half * diry - r * perp_y)
+    p4 = (x - half * dirx - r * perp_x, y - half * diry - r * perp_y)
+    ax.add_patch(Polygon([p1, p2, p3, p4], closed=True, color=color, alpha=alpha, linewidth=0))
+
+    ax.add_patch(Circle((x - half * dirx, y - half * diry), r, color=color, alpha=alpha, linewidth=0))
+    ax.add_patch(Circle((x + half * dirx, y + half * diry), r, color=color, alpha=alpha, linewidth=0))
 
 
 def distance(p1, p2):
@@ -43,19 +63,18 @@ def find_pairs(particles, max_dist):
     return pair
 
 def endpoints(cell):
-    x, y, angle, length, _ = cell
+    x, y, angle, length = cell[0], cell[1], cell[2], cell[3]
     half = length / 2.0
     dx = math.cos(angle) * half
     dy = math.sin(angle) * half
     return (x - dx, y - dy), (x + dx, y + dy)
-
 
 def cell_area(cell):
     length = cell[3]
     r = DIAMETER / 2.0
     return DIAMETER * length + math.pi * r ** 2
 
-def closest_points_segments(p1, q1, p2, q2, eps=1e-9):
+def closest(p1, q1, p2, q2, eps=1e-9):
     p1x, p1y = p1
     q1x, q1y = q1
     p2x, p2y = p2
@@ -98,7 +117,7 @@ def closest_points_segments(p1, q1, p2, q2, eps=1e-9):
 
 
 
-def compute_forces(cells):
+def force(cells):
     n = len(cells)
     forces = [[0.0, 0.0] for _ in range(n)]
     torques = [0.0 for _ in range(n)]
@@ -111,9 +130,9 @@ def compute_forces(cells):
     for (i, j) in candidate_pairs:
         a0, a1 = endpoints(cells[i])
         b0, b1 = endpoints(cells[j])
-        pa, pb, dist = closest_points_segments(a0, a1, b0, b1)
+        pa, pb, dist = closest(a0, a1, b0, b1)
 
-        h = DIAMETER - dist  # overlap; SI: h_ij = d - |r_ci - r_cj|
+        h = DIAMETER - dist
         if h <= 0:
             continue
         contacts.append((i, j))
@@ -158,7 +177,7 @@ def divide_cells(cells):
     new_cells = []
 
     for cell in cells:
-        x, y, angle, length, div_len = cell
+        x, y, angle, length, div_len, species = cell
         if length < div_len:
             survivors.append(cell)
             continue
@@ -171,8 +190,8 @@ def divide_cells(cells):
         offset1 = length / 2.0 - l1 / 2.0
         offset2 = length / 2.0 - l2 / 2.0
 
-        daughter1 = [x - offset1 * dirx, y - offset1 * diry, angle, l1, sample_division_length()]
-        daughter2 = [x + offset2 * dirx, y + offset2 * diry, angle, l2, sample_division_length()]
+        daughter1 = [x - offset1 * dirx, y - offset1 * diry, angle, l1, sample_division_length(), species]
+        daughter2 = [x + offset2 * dirx, y + offset2 * diry, angle, l2, sample_division_length(), species]
         new_cells.append(daughter1)
         new_cells.append(daughter2)
 
@@ -183,7 +202,7 @@ def run_sim(n_particles=20, box_size=20, n_steps=300):
     plotting(cells, filename="initial_state.png")
 
     for step in range(n_steps):
-        forces, torques, contacts = compute_forces(cells)
+        forces, torques, contacts = force(cells)
         integrate(cells, forces, torques, DT)
         grow_cells(cells, DT)
         cells = divide_cells(cells)
@@ -194,21 +213,28 @@ def run_sim(n_particles=20, box_size=20, n_steps=300):
     print()
     return cells, contacts
 
-
 def plotting(cells, filename="savedsim.png"):
     fig, ax = plt.subplots(figsize=(6, 6))
 
     for cell in cells:
-        p0, p1 = endpoints(cell)
-        ax.plot([p0[0], p1[0]], [p0[1], p1[1]],
-                linewidth=DIAMETER * 6, solid_capstyle="round",
-                color="steelblue", alpha=0.85)
+        draw_capsule(ax, cell)
 
+    if cells:
+        xs = [c[0] for c in cells]
+        ys = [c[1] for c in cells]
+        max_len = max(c[3] for c in cells)
+        pad = max_len / 2.0 + DIAMETER
+        ax.set_xlim(min(xs) - pad, max(xs) + pad)
+        ax.set_ylim(min(ys) - pad, max(ys) + pad)
+    
+    plt.grid(True, 'minor', 'both')
     ax.set_aspect("equal")
     ax.set_title(f"{len(cells)} cells")
     ax.axis("off")
+    plt.grid(True, 'minor', 'both')
     fig.savefig(filename, dpi=150, bbox_inches="tight")
     plt.close(fig)
+    print("Saved visualization to", filename)
 
 if __name__ == "__main__":
     cells, contacts = run_sim()
