@@ -1,4 +1,4 @@
-import random
+6import random
 import math
 import matplotlib
 matplotlib.use("Agg")
@@ -284,9 +284,3 @@ if __name__ == "__main__":
     cells, contacts, history = run_sim(interaction_type="parasitism")
     plotting(cells)
     plot_history(history)
-    
-    
-
-if __name__ == "__main__":
-    cells, contacts = run_sim()
-    plotting(cells)
