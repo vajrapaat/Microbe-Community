@@ -1,4 +1,4 @@
-6import random
+import random
 import math
 import matplotlib
 matplotlib.use("Agg")
