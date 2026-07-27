@@ -8,15 +8,27 @@ from matplotlib.patches import Circle, Polygon
 
 DIAMETER = 1.0         
 G = 1.0                 
+diffradius = 10.0
+growthfact = 2.0
 KAPPA = 0.333           
 INTERACTION_STRENGTH = 1800.0  
 DT = 0.01               
 Color = {0:'red', 1:'steelblue'}
+tmax = 0.1
+nnorm = 20.0
 
-def sample_division_length():
+interactions = {
+    'neutral': (0.0,0.0),
+    'commensalism':(-10,0),
+    'amensalism': (10,0.0),
+    'mutualism':(-10,-10),
+    'competition': (10,10),
+    'parasitism':(-10,10)
+    }
+
+def division_len():
     l = random.gauss(4.0, 0.3)
     return min(max(l, 3.1), 4.9)
-
 
 def part_init(n, box_size):
     cells = []
@@ -26,10 +38,10 @@ def part_init(n, box_size):
         angle = random.uniform(0, 2 * math.pi)
         length = random.uniform(2.0, 3.0)
         species = i % 2
-        cells.append([x, y, angle, length, sample_division_length(), species])
+        cells.append([x, y, angle, length, division_len(), species])
     return cells
 
-def draw_capsule(ax, cell, alpha=1):
+def capsule(ax, cell, alpha=1):
     x, y, angle, length, species = cell[0], cell[1], cell[2], cell[3], cell[5]
     color = Color[species]
     r = DIAMETER / 2.0
@@ -116,7 +128,16 @@ def closest(p1, q1, p2, q2, eps=1e-9):
     return (c1x, c1y), (c2x, c2y), math.hypot(c1x - c2x, c1y - c2y)
 
 
-
+def others(cells,radius):
+    centers = [[c[0],c[1]] for c in cells]
+    pairs = find_pairs(centers, radius)
+    counts = [0]*len(cells)
+    for i, j in pairs:
+        if cells[i][5] != cells[j][5]:
+            counts[i] += 1
+            counts[j] += 1
+    return counts
+            
 def force(cells):
     n = len(cells)
     forces = [[0.0, 0.0] for _ in range(n)]
@@ -166,11 +187,15 @@ def integrate(cells, forces, torques, dt):
         cell[1] += forces[i][1] * dt
         cell[2] += torques[i] * dt
 
-def grow_cells(cells, dt, n_nutrient=1.0):
-    for cell in cells:
+def grow_cells(cells, dt, xi1 = 0.0, xi2 = 0.0, n_nutrient=1.0):
+    othercn = others(cells, diffradius)
+    for i, cell in enumerate(cells):
         area = cell_area(cell)
-        dl = G * area * n_nutrient / (KAPPA + n_nutrient) * dt
-        cell[3] += dl
+        basedl = G * area * n_nutrient / (KAPPA + n_nutrient) * dt
+        xi = xi1 if cell[5] == 0 else xi2
+        T = min((othercn[i]/nnorm), tmax)
+        factor = min(max(1 - xi*T,0.0),growthfact)
+        cell[3] += basedl*factor*dt
 
 def divide_cells(cells):
     survivors = []
@@ -190,34 +215,53 @@ def divide_cells(cells):
         offset1 = length / 2.0 - l1 / 2.0
         offset2 = length / 2.0 - l2 / 2.0
 
-        daughter1 = [x - offset1 * dirx, y - offset1 * diry, angle, l1, sample_division_length(), species]
-        daughter2 = [x + offset2 * dirx, y + offset2 * diry, angle, l2, sample_division_length(), species]
+        daughter1 = [x - offset1 * dirx, y - offset1 * diry, angle, l1, division_len(), species]
+        daughter2 = [x + offset2 * dirx, y + offset2 * diry, angle, l2, division_len(), species]
         new_cells.append(daughter1)
         new_cells.append(daughter2)
 
     return survivors + new_cells
 
-def run_sim(n_particles=20, box_size=20, n_steps=300):
+
+def plot_history(history, filename="fraction_green_history.png"):
+    fig, ax = plt.subplots(figsize=(5, 4))
+    ax.plot(history, color="seagreen")
+    ax.axhline(0.5, color="gray", linestyle="--", linewidth=1)
+    ax.set_xlabel("step")
+    ax.set_ylabel("fraction green cells")
+    ax.set_ylim(0, 1)
+    fig.savefig(filename, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print("Saved visualization to", filename)
+
+
+def run_sim(n_particles=20, box_size=20, n_steps=300, interaction_type="control"):
     cells = part_init(n_particles, box_size)
     plotting(cells, filename="initial_state.png")
+
+    xi1, xi2 = interactions[interaction_type]
+    history = []
 
     for step in range(n_steps):
         forces, torques, contacts = force(cells)
         integrate(cells, forces, torques, DT)
-        grow_cells(cells, DT)
+        grow_cells(cells, DT, xi1, xi2)
         cells = divide_cells(cells)
+
+        n_green = sum(1 for c in cells if c[5] == 1)
+        history.append(n_green / len(cells) if cells else 0.0)
 
         if step % 10 == 0:
             print(f"  step {step:3d}: {len(cells)} cells, {len(contacts)} in contact")
 
     print()
-    return cells, contacts
+    return cells, contacts, history
 
 def plotting(cells, filename="savedsim.png"):
     fig, ax = plt.subplots(figsize=(6, 6))
 
     for cell in cells:
-        draw_capsule(ax, cell)
+        capsule(ax, cell)
 
     if cells:
         xs = [c[0] for c in cells]
@@ -227,14 +271,21 @@ def plotting(cells, filename="savedsim.png"):
         ax.set_xlim(min(xs) - pad, max(xs) + pad)
         ax.set_ylim(min(ys) - pad, max(ys) + pad)
     
-    plt.grid(True, 'minor', 'both')
+    #plt.grid(True, 'minor', 'both')
     ax.set_aspect("equal")
     ax.set_title(f"{len(cells)} cells")
     ax.axis("off")
-    plt.grid(True, 'minor', 'both')
+    #plt.grid(True, 'minor', 'both')
     fig.savefig(filename, dpi=150, bbox_inches="tight")
     plt.close(fig)
     print("Saved visualization to", filename)
+
+if __name__ == "__main__":
+    cells, contacts, history = run_sim(interaction_type="parasitism")
+    plotting(cells)
+    plot_history(history)
+    
+    
 
 if __name__ == "__main__":
     cells, contacts = run_sim()
