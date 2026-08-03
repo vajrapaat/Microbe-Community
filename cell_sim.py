@@ -4,26 +4,24 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle, Polygon
+import diffusion
 
 
 DIAMETER = 1.0         
 G = 1.0                 
-diffradius = 10.0
 growthfact = 2.0
 KAPPA = 0.333           
 INTERACTION_STRENGTH = 1800.0  
-DT = 0.01               
-Color = {0:'red', 1:'steelblue'}
-tmax = 0.1
-nnorm = 20.0
+DT = 0.001               
+Color = {0:'red', 1:'seagreen'}
 
 interactions = {
-    'neutral': (0.0,0.0),
-    'commensalism':(-10,0),
-    'amensalism': (10,0.0),
-    'mutualism':(-10,-10),
-    'competition': (10,10),
-    'parasitism':(-10,10)
+    'neutral': (0.0, 0.0),
+    'commensalism': (0.0, -10),
+    'amensalism': (0.0, 10),
+    'mutualism': (-10, -10),
+    'competition': (10, 10),
+    'parasitism': (10, -10)
     }
 
 def division_len():
@@ -32,9 +30,10 @@ def division_len():
 
 def part_init(n, box_size):
     cells = []
+    half = box_size / 2.0
     for i in range(n):
-        x = random.uniform(0, box_size)
-        y = random.uniform(0, box_size)
+        x = random.uniform(-half, half)
+        y = random.uniform(-half, half)
         angle = random.uniform(0, 2 * math.pi)
         length = random.uniform(2.0, 3.0)
         species = i % 2
@@ -128,16 +127,6 @@ def closest(p1, q1, p2, q2, eps=1e-9):
     return (c1x, c1y), (c2x, c2y), math.hypot(c1x - c2x, c1y - c2y)
 
 
-def others(cells,radius):
-    centers = [[c[0],c[1]] for c in cells]
-    pairs = find_pairs(centers, radius)
-    counts = [0]*len(cells)
-    for i, j in pairs:
-        if cells[i][5] != cells[j][5]:
-            counts[i] += 1
-            counts[j] += 1
-    return counts
-            
 def force(cells):
     n = len(cells)
     forces = [[0.0, 0.0] for _ in range(n)]
@@ -187,15 +176,24 @@ def integrate(cells, forces, torques, dt):
         cell[1] += forces[i][1] * dt
         cell[2] += torques[i] * dt
 
-def grow_cells(cells, dt, xi1 = 0.0, xi2 = 0.0, n_nutrient=1.0):
-    othercn = others(cells, diffradius)
-    for i, cell in enumerate(cells):
+def grow_cells(cells, dt, xi1, xi2, n_field, chem_from_red, chem_from_green):
+    """SI Eq. 23: dl/dt = g*A*n/(kappa+n)*(1-xi*T).
+    n and T (the interaction chemical produced by the OTHER species) are
+    read from the actual reaction-diffusion fields at each cell's position,
+    rather than assumed constant / approximated by a neighbor count."""
+    for cell in cells:
         area = cell_area(cell)
-        basedl = G * area * n_nutrient / (KAPPA + n_nutrient) * dt
-        xi = xi1 if cell[5] == 0 else xi2
-        T = min((othercn[i]/nnorm), tmax)
-        factor = min(max(1 - xi*T,0.0),growthfact)
-        cell[3] += basedl*factor*dt
+        x, y, species = cell[0], cell[1], cell[5]
+        n_local = diffusion.lookup(n_field, x, y)
+        basedl = G * area * n_local / (KAPPA + n_local) * dt
+        if species == 0:
+            xi = xi1
+            T = diffusion.lookup(chem_from_green, x, y)  
+        else:
+            xi = xi2
+            T = diffusion.lookup(chem_from_red, x, y) 
+        factor = min(max(1 - xi * T, 0.0), growthfact)
+        cell[3] += basedl * factor
 
 def divide_cells(cells):
     survivors = []
@@ -235,24 +233,33 @@ def plot_history(history, filename="fraction_green_history.png"):
     print("Saved visualization to", filename)
 
 
-def run_sim(n_particles=20, box_size=20, n_steps=300, interaction_type="control"):
+def run_sim(n_particles=100, box_size=60, maxind= 3000, n_steps=10000, interaction_type="control"):
     cells = part_init(n_particles, box_size)
     plotting(cells, filename="initial_state.png")
 
     xi1, xi2 = interactions[interaction_type]
     history = []
 
-    for step in range(n_steps):
+    n_field = diffusion.new_nutrient_field()
+    chem_from_red = diffusion.new_chemical_field()    
+    chem_from_green = diffusion.new_chemical_field()  
+    step = 0
+    while len(cells) < maxind and step < n_steps:
         forces, torques, contacts = force(cells)
         integrate(cells, forces, torques, DT)
-        grow_cells(cells, DT, xi1, xi2)
+        rho_red = diffusion.compute_density(cells, cell_area, species_filter=0)
+        rho_green = diffusion.compute_density(cells, cell_area, species_filter=1)
+        rho_total = rho_red + rho_green
+        n_field = diffusion.step_nutrient(n_field, rho_total, DT)
+        chem_from_red = diffusion.step_chemical(chem_from_red, rho_red, DT)
+        chem_from_green = diffusion.step_chemical(chem_from_green, rho_green, DT)
+        grow_cells(cells, DT, xi1, xi2, n_field, chem_from_red, chem_from_green)
         cells = divide_cells(cells)
-
         n_green = sum(1 for c in cells if c[5] == 1)
         history.append(n_green / len(cells) if cells else 0.0)
-
         if step % 10 == 0:
-            print(f"  step {step:3d}: {len(cells)} cells, {len(contacts)} in contact")
+            print(f"  step {step}: {len(cells)} cells")
+        step =+ 1
 
     print()
     return cells, contacts, history
@@ -281,6 +288,6 @@ def plotting(cells, filename="savedsim.png"):
     print("Saved visualization to", filename)
 
 if __name__ == "__main__":
-    cells, contacts, history = run_sim(interaction_type="parasitism")
+    cells, contacts, history = run_sim(interaction_type="competition")
     plotting(cells)
     plot_history(history)
