@@ -169,7 +169,6 @@ def force(cells):
 
     return forces, torques, contacts
 
-
 def integrate(cells, forces, torques, dt):
     for i, cell in enumerate(cells):
         cell[0] += forces[i][0] * dt
@@ -177,10 +176,6 @@ def integrate(cells, forces, torques, dt):
         cell[2] += torques[i] * dt
 
 def grow_cells(cells, dt, xi1, xi2, n_field, chem_from_red, chem_from_green):
-    """SI Eq. 23: dl/dt = g*A*n/(kappa+n)*(1-xi*T).
-    n and T (the interaction chemical produced by the OTHER species) are
-    read from the actual reaction-diffusion fields at each cell's position,
-    rather than assumed constant / approximated by a neighbor count."""
     for cell in cells:
         area = cell_area(cell)
         x, y, species = cell[0], cell[1], cell[5]
@@ -240,26 +235,26 @@ def run_sim(n_particles=100, box_size=60, maxind= 3000, n_steps=10000, interacti
     xi1, xi2 = interactions[interaction_type]
     history = []
 
-    n_field = diffusion.new_nutrient_field()
-    chem_from_red = diffusion.new_chemical_field()    
-    chem_from_green = diffusion.new_chemical_field()  
+    n_field = diffusion.nutrientfield()
+    chem_from_red = diffusion.chemmfield()    
+    chem_from_green = diffusion.chemmfield()  
     step = 0
     while len(cells) < maxind and step < n_steps:
         forces, torques, contacts = force(cells)
         integrate(cells, forces, torques, DT)
-        rho_red = diffusion.compute_density(cells, cell_area, species_filter=0)
-        rho_green = diffusion.compute_density(cells, cell_area, species_filter=1)
+        rho_red = diffusion.density(cells, cell_area, specfilt=0)
+        rho_green = diffusion.density(cells, cell_area, specfilt=1)
         rho_total = rho_red + rho_green
-        n_field = diffusion.step_nutrient(n_field, rho_total, DT)
-        chem_from_red = diffusion.step_chemical(chem_from_red, rho_red, DT)
-        chem_from_green = diffusion.step_chemical(chem_from_green, rho_green, DT)
+        n_field = diffusion.nutrientstep(n_field, rho_total, DT)
+        chem_from_red = diffusion.chemmstep(chem_from_red, rho_red, DT)
+        chem_from_green = diffusion.chemmstep(chem_from_green, rho_green, DT)
         grow_cells(cells, DT, xi1, xi2, n_field, chem_from_red, chem_from_green)
         cells = divide_cells(cells)
         n_green = sum(1 for c in cells if c[5] == 1)
         history.append(n_green / len(cells) if cells else 0.0)
         if step % 10 == 0:
             print(f"  step {step}: {len(cells)} cells")
-        step =+ 1
+        step += 1
 
     print()
     return cells, contacts, history
