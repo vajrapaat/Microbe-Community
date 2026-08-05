@@ -1,9 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Mon Aug  3 15:22:35 2026
-
-@author: Sweta
-"""
 import numpy as np
 import math
 
@@ -13,10 +7,11 @@ bc = 10
 Dc = 1000
 an = 1
 k = 0.333
-gridspace = 5
+gridspace = 301
 
 points = int(2*bounds)
 coord = np.linspace(-bounds, bounds, gridspace)
+dx = coord[0]-coord[1]
 bins = int(len(coord) - 1.0)
 
 def nutrientfield():
@@ -36,18 +31,18 @@ def density(cells,cell_area,specfilt = None):
         ys.append(c[1])
         areas.append(cell_area(c))
     if not xs:
-        return np.zeros(bins, bins)
+        return np.zeros((bins, bins))
     hist, _, _ = np.histogram2d(xs,ys,bins=[coord, coord], weights = areas)
-    gridcellar = gridspace**2 
+    gridcellar = dx**2 
     return hist/gridcellar
 
 def laplacian(field):
     lap = np.zeros_like(field)
-    lap[1:-1,1:-1] = (field[2:,1:-1] + field[:-2,1:-1] + field[1:-1,2:] + field[1:-1,:-2])/gridspace**2
+    lap[1:-1,1:-1] = (field[2:,1:-1] + field[:-2,1:-1] + field[1:-1,2:] + field[1:-1,:-2] - 4*field[1:-1,1:-1])/dx**2
     return lap
 
 def substeps(D, dt):
-    lim = gridspace**2 / 4*D
+    lim = dx**2/(4*D)
     if dt <= lim:
         return 1
     return int(math.ceil(dt/lim))
@@ -78,9 +73,10 @@ def chemmstep(c_field, rhoc, dt):
     return c_field
 
 def lookup(field, x, y):
-    ix = int((x+bounds)/gridspace)
-    iy = int((y+bounds)/gridspace)
+    ix = int((x+bounds)/dx)
+    iy = int((y+bounds)/dx)
     ix = min(max(ix, 0), bins-1)
     iy = min(max(iy, 0), bins-1)
     return field[ix,iy]
+    
     
