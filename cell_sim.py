@@ -1,3 +1,4 @@
+
 import random
 import math
 import matplotlib
@@ -11,7 +12,7 @@ DIAMETER = 1.0
 G = 1.0                 
 growthfact = 2.0
 KAPPA = 0.333           
-INTERACTION_STRENGTH = 1800.0  
+INTERACTION_STRENGTH = 1000.0  
 DT = 0.001               
 Color = {0:'red', 1:'seagreen'}
 
@@ -228,7 +229,7 @@ def plot_history(history, filename="fraction_green_history.png"):
     print("Saved visualization to", filename)
 
 
-def run_sim(n_particles=100, box_size=60, maxind= 3000, n_steps=10000, interaction_type="control"):
+def run_sim(n_particles=100, box_size=12, maxind= 1000, n_steps=10000, interaction_type="control"):
     cells = part_init(n_particles, box_size)
     plotting(cells, filename="initial_state.png")
 
@@ -283,6 +284,6 @@ def plotting(cells, filename="savedsim.png"):
     print("Saved visualization to", filename)
 
 if __name__ == "__main__":
-    cells, contacts, history = run_sim(interaction_type="competition")
+    cells, contacts, history = run_sim(interaction_type="mutualism")
     plotting(cells)
     plot_history(history)
