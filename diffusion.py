@@ -1,7 +1,7 @@
 import numpy as np
 import math
 
-bounds = 750
+bounds = 500
 Dn = 250
 bc = 10
 Dc = 1000
@@ -11,11 +11,11 @@ gridspace = 301
 
 points = int(2*bounds)
 coord = np.linspace(-bounds, bounds, gridspace)
-dx = coord[0]-coord[1]
+dx = coord[1]-coord[0]
 bins = int(len(coord) - 1.0)
 
 def nutrientfield():
-    return np.zeros((bins,bins))
+    return np.ones((bins,bins))
 
 def chemmfield():
     return np.zeros((bins,bins))
@@ -58,6 +58,7 @@ def nutrientstep(n_field, rho, dt):
         n_field[-1,:] = 1.0
         n_field[:,0] = 1.0
         n_field[:,-1] = 1.0
+        n_field = np.clip(n_field, 0.0, None) 
     return n_field
 
 def chemmstep(c_field, rhoc, dt):
@@ -70,6 +71,7 @@ def chemmstep(c_field, rhoc, dt):
         c_field[-1,:] = 0.0
         c_field[:,0] = 0.0
         c_field[:,-1] = 0.0
+        c_field = np.clip(c_field, 0.0, None)
     return c_field
 
 def lookup(field, x, y):
